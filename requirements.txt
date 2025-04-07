@@ -1,0 +1,5 @@
+streamlit
+pyrebase4
+pandas
+scikit-learn
+setuptools
