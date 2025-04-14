@@ -1,28 +1,37 @@
 import streamlit as st
 import pyrebase
 from firebase_config import firebase_config
-import pandas as pd
-from sklearn.metrics.pairwise import euclidean_distances
+import datetime
 
 firebase = pyrebase.initialize_app(firebase_config)
 auth = firebase.auth()
+db = firebase.database()
 
-# 🧠 โปรไฟล์จำลอง
-profiles = {
-    "มุก": [0.9, 0.8, 0.3],
-    "แทน": [0.7, 0.6, 0.4],
-    "ใบเฟิร์น": [0.2, 0.3, 0.9],
-    "ซันนี่": [0.8, 0.7, 0.2],
-    "พลอย": [0.4, 0.5, 0.8],
-}
+# ----------------------------
+# ✅ โหลดรหัสลับจาก Firebase
+# ----------------------------
+@st.cache_data(ttl=300)
+def load_hotel_secrets():
+    try:
+        data = db.child("hotel_secrets").get()
+        return data.val() if data.val() else {}
+    except Exception as e:
+        st.error(f"❌ โหลดรหัสลับไม่สำเร็จ: {e}")
+        return {}
 
-# 📌 ตรวจสอบ session login
+HOTEL_SECRETS = load_hotel_secrets()
+
+# ----------------------------
+# ✅ ตรวจสอบ session login
+# ----------------------------
 if "user" not in st.session_state:
     st.sidebar.title("🔐 เข้าสู่ระบบหรือสมัครสมาชิก")
 
     menu = st.sidebar.selectbox("เลือกเมนู", ["เข้าสู่ระบบ", "สมัครสมาชิก"])
     email = st.sidebar.text_input("อีเมล")
     password = st.sidebar.text_input("รหัสผ่าน", type="password")
+    hotel_name = st.sidebar.selectbox("เลือกโรงแรม", list(HOTEL_SECRETS.keys()))
+    hotel_secret = st.sidebar.text_input("รหัสลับประจำโรงแรม", type="password")
 
     if menu == "สมัครสมาชิก":
         if st.sidebar.button("สมัครสมาชิก"):
@@ -30,6 +39,8 @@ if "user" not in st.session_state:
                 st.sidebar.warning("⚠️ กรุณาใช้อีเมลที่ถูกต้อง")
             elif len(password) < 6:
                 st.sidebar.warning("⚠️ รหัสผ่านต้องมีอย่างน้อย 6 ตัว")
+            elif hotel_secret != HOTEL_SECRETS.get(hotel_name, ""):
+                st.sidebar.warning("❌ รหัสลับไม่ถูกต้อง")
             else:
                 try:
                     auth.create_user_with_email_and_password(email, password)
@@ -41,40 +52,95 @@ if "user" not in st.session_state:
         if st.sidebar.button("เข้าสู่ระบบ"):
             try:
                 user = auth.sign_in_with_email_and_password(email, password)
-                st.session_state["user"] = user
-                st.experimental_rerun()
+                if hotel_secret != HOTEL_SECRETS.get(hotel_name, ""):
+                    st.sidebar.warning("❌ รหัสลับไม่ถูกต้อง")
+                else:
+                    st.session_state["user"] = user
+                    st.session_state["hotel"] = hotel_name
+                    st.rerun()
             except Exception as e:
                 st.sidebar.error("❌ อีเมลหรือรหัสผ่านไม่ถูกต้อง")
 
+# ----------------------------
+# ✅ ผู้ใช้เข้าสู่ระบบแล้ว
+# ----------------------------
 else:
-    # ✅ ผู้ใช้เข้าสู่ระบบแล้ว
-    st.sidebar.success("🎉 คุณได้เข้าสู่ระบบแล้ว")
+    st.sidebar.success(f"🎉 เข้าสู่ระบบแล้ว: {st.session_state['hotel']}")
     if st.sidebar.button("ออกจากระบบ"):
         st.session_state.clear()
-        st.experimental_rerun()
+        st.rerun()
+
+    hotel = st.session_state["hotel"]
+    tab1, tab2 = st.tabs(["👩‍🍳 สูตรอาหารในครัว", "🧼 สูตรแม่บ้าน"])
 
     # ----------------------------
-    # 🌟 หน้าแอพหลัก (จับคู่ Mind Profile)
+    # 🍳 สูตรอาหาร
     # ----------------------------
+    with tab1:
+        st.title("📒 สูตรอาหารภายในโรงแรม")
+        name = st.text_input("ชื่อสูตรอาหาร")
+        content = st.text_area("รายละเอียด/ส่วนผสม/วิธีทำ")
 
-    st.title("🧠 Matching Mind")
-    st.subheader("🤝 จับคู่คนที่มี Mind Profile คล้ายกัน")
+        if st.button("💾 บันทึกสูตร"):
+            if name and content:
+                recipe = {
+                    "name": name,
+                    "content": content,
+                    "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                }
+                db.child("recipes").child(hotel).push(recipe)
+                st.success(f"✅ บันทึก '{name}' เรียบร้อยแล้ว")
+                st.rerun()
+            else:
+                st.warning("⚠️ กรุณาใส่ชื่อและรายละเอียดให้ครบ")
 
-    st.write("💬 ใส่โปรไฟล์ของคุณ")
-    self_reflection = st.slider("Self Reflection", 0.0, 1.0, 0.5)
-    emotional_openness = st.slider("Emotional Openness", 0.0, 1.0, 0.5)
-    fear_of_judgment = st.slider("Fear of Judgment", 0.0, 1.0, 0.5)
+        st.divider()
+        st.subheader("🔍 ค้นหาสูตรอาหาร")
+        search = st.text_input("พิมพ์คำค้น เช่น 'ผัดไทย' หรือ 'ซุป'")
 
-    user_profile = [self_reflection, emotional_openness, fear_of_judgment]
+        recipes = db.child("recipes").child(hotel).get().val() or {}
+        for key, recipe in reversed(list(recipes.items())):
+            if search.lower() in recipe["name"].lower() or search.lower() in recipe["content"].lower():
+                st.markdown(f"### 🍽️ {recipe['name']}")
+                st.caption(f"🕒 บันทึกเมื่อ {recipe['timestamp']}")
+                st.write(recipe["content"])
+                if st.button(f"🗑 ลบสูตร '{recipe['name']}'", key=f"delete_recipe_{key}"):
+                    db.child("recipes").child(hotel).child(key).remove()
+                    st.success(f"✅ ลบสูตร '{recipe['name']}' แล้ว")
+                    st.rerun()
+                st.divider()
 
-    if st.button("🔍 ค้นหาเพื่อนที่ใกล้คุณที่สุด"):
-        df = pd.DataFrame.from_dict(profiles, orient='index', columns=[
-            "SelfReflection", "EmotionalOpenness", "FearOfJudgment"
-        ])
-        df["Distance"] = euclidean_distances([user_profile], df.values)[0]
-        best_match = df["Distance"].idxmin()
+    # ----------------------------
+    # 🧼 สูตรแม่บ้าน
+    # ----------------------------
+    with tab2:
+        st.header("🧼 สูตรแม่บ้าน (น้ำยาทำความสะอาด ฯลฯ)")
+        name2 = st.text_input("ชื่อสูตรแม่บ้าน", key="house_name")
+        content2 = st.text_area("รายละเอียดวิธีใช้/ปริมาณ/อัตราส่วน", key="house_content")
 
-        st.success(f"✅ เพื่อนที่ใกล้เคียงกับคุณที่สุดคือ **{best_match}**")
-        st.write("🎯 ความใกล้:", round(df["Distance"].min(), 4))
-        st.subheader("👥 โปรไฟล์ของเขา:")
-        st.dataframe(df.loc[[best_match]].drop(columns="Distance"))
+        if st.button("💾 บันทึกสูตรแม่บ้าน"):
+            if name2 and content2:
+                house_recipe = {
+                    "name": name2,
+                    "content": content2,
+                    "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                }
+                db.child("house_recipes").child(hotel).push(house_recipe)
+                st.success(f"✅ บันทึกสูตรแม่บ้าน '{name2}' แล้วค่ะ")
+                st.rerun()
+            else:
+                st.warning("⚠️ กรุณาใส่ชื่อและรายละเอียดให้ครบ")
+
+        st.divider()
+        search2 = st.text_input("🔍 ค้นหาสูตรแม่บ้าน", key="search_house")
+        house_data = db.child("house_recipes").child(hotel).get().val() or {}
+        for key, recipe in reversed(list(house_data.items())):
+            if search2.lower() in recipe["name"].lower() or search2.lower() in recipe["content"].lower():
+                st.markdown(f"### 🧽 {recipe['name']}")
+                st.caption(f"🕒 บันทึกเมื่อ {recipe['timestamp']}")
+                st.write(recipe["content"])
+                if st.button(f"🗑 ลบสูตรแม่บ้าน '{recipe['name']}'", key=f"delete_house_{key}"):
+                    db.child("house_recipes").child(hotel).child(key).remove()
+                    st.success(f"✅ ลบสูตรแม่บ้าน '{recipe['name']}' แล้วค่ะ")
+                    st.rerun()
+                st.divider()
