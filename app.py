@@ -71,11 +71,13 @@ else:
         st.rerun()
 
     hotel = st.session_state["hotel"]
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "👩‍🍳 สูตรอาหารในครัว", 
         "🧼 สูตรแม่บ้าน", 
         "📋 บันทึกงานประจำวัน", 
-        "📑 รายงานห้องพัก"
+        "📑 รายงานห้องพัก",
+        "📦 บันทึกวัตถุดิบ",
+        "🍳 เมนูที่ทำในแต่ละวัน"
     ])
 
     # ----------------------------
@@ -86,34 +88,46 @@ else:
         name = st.text_input("ชื่อสูตรอาหาร")
         content = st.text_area("รายละเอียด/ส่วนผสม/วิธีทำ")
 
+        st.subheader("📦 วัตถุดิบในสูตร")
+        if "recipe_ingredients" not in st.session_state:
+            st.session_state["recipe_ingredients"] = []
+
+        with st.form("add_recipe_ingredient_form", clear_on_submit=True):
+            cols = st.columns([3, 2, 2])
+            ing_name = cols[0].text_input("ชื่อวัตถุดิบ", key="rec_ing_name")
+            ing_qty = cols[1].number_input("ปริมาณที่ใช้", min_value=0.0, step=0.1, key="rec_ing_qty")
+            ing_unit = cols[2].selectbox("หน่วย", ["กรัม", "กิโลกรัม"], key="rec_ing_unit")
+            submitted = st.form_submit_button("➕ เพิ่มวัตถุดิบในสูตร")
+
+            if submitted and ing_name:
+                st.session_state["recipe_ingredients"].append({
+                    "name": ing_name,
+                    "qty": ing_qty,
+                    "unit": ing_unit
+                })
+
+        if st.session_state["recipe_ingredients"]:
+            st.subheader("📋 รายการวัตถุดิบในสูตร")
+            for idx, ing in enumerate(st.session_state["recipe_ingredients"]):
+                st.write(f"🟩 {ing['name']} - {ing['qty']} {ing['unit']}")
+                if st.button(f"❌ ลบวัตถุดิบ", key=f"del_recipe_ing_{idx}"):
+                    st.session_state["recipe_ingredients"].pop(idx)
+                    st.rerun()
+
         if st.button("💾 บันทึกสูตร"):
             if name and content:
                 recipe = {
                     "name": name,
                     "content": content,
+                    "ingredients": st.session_state["recipe_ingredients"],
                     "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                 }
                 db.child("recipes").child(hotel).push(recipe)
                 st.success(f"✅ บันทึก '{name}' เรียบร้อยแล้ว")
+                st.session_state["recipe_ingredients"] = []
                 st.rerun()
             else:
                 st.warning("⚠️ กรุณาใส่ชื่อและรายละเอียดให้ครบ")
-
-        st.divider()
-        st.subheader("🔍 ค้นหาสูตรอาหาร")
-        search = st.text_input("พิมพ์คำค้น เช่น 'ผัดไทย' หรือ 'ซุป'")
-
-        recipes = db.child("recipes").child(hotel).get().val() or {}
-        for key, recipe in reversed(list(recipes.items())):
-            if search.lower() in recipe["name"].lower() or search.lower() in recipe["content"].lower():
-                st.markdown(f"### 🍽️ {recipe['name']}")
-                st.caption(f"🕒 บันทึกเมื่อ {recipe['timestamp']}")
-                st.write(recipe["content"])
-                if st.button(f"🗑 ลบสูตร '{recipe['name']}'", key=f"delete_recipe_{key}"):
-                    db.child("recipes").child(hotel).child(key).remove()
-                    st.success(f"✅ ลบสูตร '{recipe['name']}' แล้ว")
-                    st.rerun()
-                st.divider()
 
     # ----------------------------
     # 🧼 สูตรแม่บ้าน
@@ -272,4 +286,139 @@ else:
                 })
             st.success(f"✅ บันทึกรายงานวันที่ {selected_date.strftime('%d/%m/%Y')} เรียบร้อยแล้ว")
             st.rerun()
+
+    # ----------------------------
+    # 📦 บันทึกวัตถุดิบ
+    # ----------------------------
+    with tab5:
+        st.header("📦 บันทึกการซื้อวัตถุดิบ")
+        purchase_date = st.date_input("🗓 วันที่ซื้อวัตถุดิบ", value=datetime.date.today(), key="purchase_date")
+
+        if "ingredients" not in st.session_state:
+            st.session_state["ingredients"] = []
+
+        st.subheader("➕ เพิ่มรายการวัตถุดิบ")
+
+        with st.form("add_ingredient_form", clear_on_submit=True):
+            cols = st.columns([3, 2, 2])
+            name = cols[0].text_input("ชื่อวัตถุดิบ", key="ing_name")
+            qty = cols[1].number_input("จำนวน", min_value=0.0, step=0.1, key="ing_qty")
+            unit = cols[2].selectbox("หน่วย", ["กรัม", "กิโลกรัม"], key="ing_unit")
+            submitted = st.form_submit_button("➕ เพิ่ม")
+
+            if submitted and name:
+                st.session_state["ingredients"].append({
+                    "name": name,
+                    "qty": qty,
+                    "unit": unit
+                })
+
+        if st.session_state["ingredients"]:
+            st.subheader("📋 รายการที่เพิ่ม")
+            for idx, ing in enumerate(st.session_state["ingredients"]):
+                st.write(f"🟩 {ing['name']} - {ing['qty']} {ing['unit']}")
+                if st.button(f"❌ ลบ", key=f"delete_ing_{idx}"):
+                    st.session_state["ingredients"].pop(idx)
+                    st.rerun()
+
+            if st.button("💾 บันทึกทั้งหมด"):
+                for ing in st.session_state["ingredients"]:
+                    db.child("ingredient_stock").child(hotel).child(str(purchase_date)).push({
+                        "name": ing["name"],
+                        "qty": ing["qty"],
+                        "unit": ing["unit"],
+                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    })
+                st.success("✅ บันทึกวัตถุดิบทั้งหมดเรียบร้อยแล้ว")
+                st.session_state["ingredients"] = []
+                st.rerun()
+
+        # ----------------------------
+        # 📊 แสดงวัตถุดิบคงเหลือ
+        # ----------------------------
+        st.markdown("---")
+        st.subheader("📉 คำนวณวัตถุดิบคงเหลือวันนี้")
+        selected_report_date = st.date_input("เลือกวันที่ต้องการดูยอดคงเหลือ", value=datetime.date.today(), key="stock_balance_date")
+        selected_report_str = selected_report_date.strftime('%Y-%m-%d')
+
+        # รวมวัตถุดิบที่ซื้อทั้งหมดจนถึงวันที่เลือก
+        purchases = db.child("ingredient_stock").child(hotel).get().val() or {}
+        total_stock = {}
+        for date_str, entries in purchases.items():
+            if date_str <= selected_report_str:
+                for _, entry in entries.items():
+                    name = entry.get("name")
+                    qty = entry.get("qty", 0)
+                    unit = entry.get("unit", "กรัม")
+                    qty_in_grams = qty * 1000 if unit == "กิโลกรัม" else qty
+                    total_stock[name] = total_stock.get(name, 0) + qty_in_grams
+
+        # รวมวัตถุดิบที่ใช้จากเมนูที่ทำ
+        daily_menus = db.child("daily_cooked_menu").child(hotel).get().val() or {}
+        recipes = db.child("recipes").child(hotel).get().val() or {}
+
+        used_ingredients = {}
+        for date_str, menu_data in daily_menus.items():
+            if date_str <= selected_report_str:
+                menus = menu_data.get("menus", [])
+                for menu in menus:
+                    for _, recipe in recipes.items():
+                        if recipe.get("name") == menu:
+                            for ing in recipe.get("ingredients", []):
+                                ing_name = ing.get("name")
+                                ing_qty = ing.get("qty", 0)
+                                ing_unit = ing.get("unit", "กรัม")
+                                qty_in_grams = ing_qty * 1000 if ing_unit == "กิโลกรัม" else ing_qty
+                                used_ingredients[ing_name] = used_ingredients.get(ing_name, 0) + qty_in_grams
+
+        # คำนวณคงเหลือ
+        st.subheader("📦 คงเหลือวัตถุดิบ ณ วันที่เลือก")
+        if total_stock:
+            for name in sorted(total_stock):
+                bought = total_stock.get(name, 0)
+                used = used_ingredients.get(name, 0)
+                remaining = bought - used
+                st.write(f"{name}: {remaining:.2f} กรัม (มีทั้งหมด {bought:.2f}, ใช้ไป {used:.2f})")
+        else:
+            st.info("ไม่มีข้อมูลวัตถุดิบในระบบ")
+
+    # ----------------------------
+    # 🍳 เมนูที่ทำในแต่ละวัน
+    # ----------------------------
+        with tab6:
+            st.header("🍳 บันทึกเมนูที่ทำในแต่ละวัน")
+            cooking_date = st.date_input("📅 วันที่ทำอาหาร", value=datetime.date.today(), key="cooking_date")
+
+            all_recipes = db.child("recipes").child(hotel).get().val() or {}
+            recipe_options = [r["name"] for r in all_recipes.values()] if all_recipes else []
+
+            if "daily_menu" not in st.session_state:
+                st.session_state["daily_menu"] = []
+
+            st.subheader("➕ เพิ่มเมนูที่ทำ")
+
+            with st.form("add_menu_form", clear_on_submit=True):
+                menu = st.selectbox("🍽 เลือกเมนู", recipe_options, key="menu_select")
+                submitted = st.form_submit_button("➕ เพิ่ม")
+
+                if submitted and menu:
+                    st.session_state["daily_menu"].append(menu)
+
+            if st.session_state["daily_menu"]:
+                st.subheader("📋 เมนูที่เพิ่ม")
+                for idx, m in enumerate(st.session_state["daily_menu"]):
+                    st.write(f"✅ {m}")
+                    if st.button(f"❌ ลบเมนู", key=f"delete_menu_{idx}"):
+                        st.session_state["daily_menu"].pop(idx)
+                        st.rerun()
+
+                if st.button("📝 บันทึกเมนูทั้งหมด"):
+                    db.child("daily_cooked_menu").child(hotel).child(str(cooking_date)).set({
+                        "menus": st.session_state["daily_menu"],
+                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    })
+                    st.success("✅ บันทึกเมนูทั้งหมดเรียบร้อยแล้ว")
+                    st.session_state["daily_menu"] = []
+                    st.rerun()
+
 
