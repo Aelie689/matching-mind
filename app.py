@@ -85,6 +85,7 @@ else:
     # ----------------------------
     with tab1:
         st.title("📒 สูตรอาหารภายในโรงแรม")
+
         name = st.text_input("ชื่อสูตรอาหาร")
         content = st.text_area("รายละเอียด/ส่วนผสม/วิธีทำ")
 
@@ -128,6 +129,30 @@ else:
                 st.rerun()
             else:
                 st.warning("⚠️ กรุณาใส่ชื่อและรายละเอียดให้ครบ")
+
+        # 🔍 ค้นหาสูตรอาหาร
+        st.divider()
+        st.subheader("🔍 ค้นหาสูตรอาหาร")
+        search = st.text_input("พิมพ์คำค้น เช่น 'ผัดไทย' หรือ 'ไข่เจียว'")
+
+        recipes = db.child("recipes").child(hotel).get().val() or {}
+        for key, recipe in reversed(list(recipes.items())):
+            if search.lower() in recipe["name"].lower() or search.lower() in recipe["content"].lower():
+                st.markdown(f"### 🍽️ {recipe['name']}")
+                st.caption(f"🕒 บันทึกเมื่อ {recipe['timestamp']}")
+                st.write(recipe["content"])
+
+                # ✅ แสดงวัตถุดิบในสูตร
+                if "ingredients" in recipe and recipe["ingredients"]:
+                    st.markdown("**📦 วัตถุดิบในสูตร:**")
+                    for ing in recipe["ingredients"]:
+                        st.write(f"- {ing['name']} {ing['qty']} {ing['unit']}")
+
+                if st.button(f"🗑 ลบสูตร '{recipe['name']}'", key=f"delete_recipe_{key}"):
+                    db.child("recipes").child(hotel).child(key).remove()
+                    st.success(f"✅ ลบสูตร '{recipe['name']}' แล้ว")
+                    st.rerun()
+                st.divider()
 
     # ----------------------------
     # 🧼 สูตรแม่บ้าน
@@ -208,29 +233,47 @@ else:
 
         st.caption(f"📅 วันที่รายงาน: {selected_date.strftime('%d/%m/%Y')}")
 
-        # 🔧 เตรียมตารางข้อมูล
+        # 🔧 โหลดข้อมูลเก่าจาก Firebase ถ้ามี
+        stored_data = db.child("room_reports").child(hotel).child(selected_date_str).get().val()
         default_rows = []
         for i in range(1, 21):
-            default_rows.append({
-                "ห้อง": f"Room {i}",
-                "ชื่อลูกค้า": "",
-                "จำนวนผู้เข้าพัก": 1,
-                "จำนวนผู้ใหญ่": 1,
-                "จำนวนเด็ก": 0,
-                "ABF": "รับ",
-                "วันที่เข้า": selected_date,
-                "วันที่ออก": selected_date,
-                "รู้จักเราจากช่องทางไหน": "เจอตอนค้นหาโรงแรมบน OTA ระบุ",
-                "ช่องทางการจอง": "Walk-in",
-                "หมายเหตุ": ""
-            })
+            room_name = f"Room {i}"
+            if stored_data and room_name in stored_data:
+                row = stored_data[room_name]
+                default_rows.append({
+                    "ห้อง": row.get("room", room_name),
+                    "ชื่อลูกค้า": row.get("name", ""),
+                    "จำนวนผู้เข้าพัก": row.get("guest", 1),
+                    "จำนวนผู้ใหญ่": row.get("adult_abf", 1),
+                    "จำนวนเด็ก": row.get("child_abf", 0),
+                    "ABF": row.get("abf", "รับ"),
+                    "วันที่เข้า": datetime.date.fromisoformat(row.get("in_date", selected_date_str)),
+                    "วันที่ออก": datetime.date.fromisoformat(row.get("out_date", selected_date_str)),
+                    "รู้จักเราจากช่องทางไหน": row.get("source", "เจอตอนค้นหาโรงแรมบน OTA ระบุ"),
+                    "ช่องทางการจอง": row.get("booking_channel", "Walk-in"),
+                    "หมายเหตุ": row.get("remark", "")
+                })
+            else:
+                default_rows.append({
+                    "ห้อง": room_name,
+                    "ชื่อลูกค้า": "",
+                    "จำนวนผู้เข้าพัก": 1,
+                    "จำนวนผู้ใหญ่": 1,
+                    "จำนวนเด็ก": 0,
+                    "ABF": "รับ",
+                    "วันที่เข้า": selected_date,
+                    "วันที่ออก": selected_date,
+                    "รู้จักเราจากช่องทางไหน": "เจอตอนค้นหาโรงแรมบน OTA ระบุ",
+                    "ช่องทางการจอง": "Walk-in",
+                    "หมายเหตุ": ""
+                })
 
         edited_df = st.data_editor(
             default_rows,
             column_config={
                 "ห้อง": st.column_config.TextColumn(disabled=True),
                 "ชื่อลูกค้า": st.column_config.TextColumn(),
-                "จำนวนผู้เข้าพัก": st.column_config.NumberColumn(min_value=1, max_value=10),
+                "จำนวนผู้เข้าพัก": st.column_config.NumberColumn(min_value=0, max_value=10),
                 "จำนวนผู้ใหญ่": st.column_config.NumberColumn(min_value=0, max_value=10),
                 "จำนวนเด็ก": st.column_config.NumberColumn(min_value=0, max_value=10),
                 "ABF": st.column_config.SelectboxColumn(options=["รับ", "ไม่รับ"]),
@@ -293,44 +336,51 @@ else:
     with tab5:
         st.header("📦 บันทึกการซื้อวัตถุดิบ")
         purchase_date = st.date_input("🗓 วันที่ซื้อวัตถุดิบ", value=datetime.date.today(), key="purchase_date")
+        purchase_date_str = str(purchase_date)
 
-        if "ingredients" not in st.session_state:
-            st.session_state["ingredients"] = []
+        # โหลดข้อมูลวัตถุดิบที่เคยบันทึกไว้ในวันนั้น
+        previous_data = db.child("ingredient_stock").child(hotel).child(purchase_date_str).get().val() or {}
+        previously_saved = list(previous_data.values())
+
+        if f"ingredients_{purchase_date_str}" not in st.session_state:
+            st.session_state[f"ingredients_{purchase_date_str}"] = previously_saved
 
         st.subheader("➕ เพิ่มรายการวัตถุดิบ")
 
         with st.form("add_ingredient_form", clear_on_submit=True):
             cols = st.columns([3, 2, 2])
-            name = cols[0].text_input("ชื่อวัตถุดิบ", key="ing_name")
-            qty = cols[1].number_input("จำนวน", min_value=0.0, step=0.1, key="ing_qty")
-            unit = cols[2].selectbox("หน่วย", ["กรัม", "กิโลกรัม"], key="ing_unit")
+            name = cols[0].text_input("ชื่อวัตถุดิบ", key=f"ing_name_{purchase_date_str}")
+            qty = cols[1].number_input("จำนวน", min_value=0.0, step=0.1, key=f"ing_qty_{purchase_date_str}")
+            unit = cols[2].selectbox("หน่วย", ["กรัม", "กิโลกรัม"], key=f"ing_unit_{purchase_date_str}")
             submitted = st.form_submit_button("➕ เพิ่ม")
 
             if submitted and name:
-                st.session_state["ingredients"].append({
+                st.session_state[f"ingredients_{purchase_date_str}"].append({
                     "name": name,
                     "qty": qty,
                     "unit": unit
                 })
+                st.rerun()
 
-        if st.session_state["ingredients"]:
-            st.subheader("📋 รายการที่เพิ่ม")
-            for idx, ing in enumerate(st.session_state["ingredients"]):
+        if st.session_state[f"ingredients_{purchase_date_str}"]:
+            st.subheader("📋 รายการวัตถุดิบที่เพิ่มแล้ว")
+            for idx, ing in enumerate(st.session_state[f"ingredients_{purchase_date_str}"]):
                 st.write(f"🟩 {ing['name']} - {ing['qty']} {ing['unit']}")
-                if st.button(f"❌ ลบ", key=f"delete_ing_{idx}"):
-                    st.session_state["ingredients"].pop(idx)
+                if st.button(f"❌ ลบ {ing['name']}", key=f"delete_ing_{purchase_date_str}_{idx}"):
+                    st.session_state[f"ingredients_{purchase_date_str}"].pop(idx)
                     st.rerun()
 
             if st.button("💾 บันทึกทั้งหมด"):
-                for ing in st.session_state["ingredients"]:
-                    db.child("ingredient_stock").child(hotel).child(str(purchase_date)).push({
+                db.child("ingredient_stock").child(hotel).child(purchase_date_str).set({
+                    str(i): {
                         "name": ing["name"],
                         "qty": ing["qty"],
                         "unit": ing["unit"],
                         "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    })
+                    }
+                    for i, ing in enumerate(st.session_state[f"ingredients_{purchase_date_str}"])
+                })
                 st.success("✅ บันทึกวัตถุดิบทั้งหมดเรียบร้อยแล้ว")
-                st.session_state["ingredients"] = []
                 st.rerun()
 
         # ----------------------------
@@ -385,40 +435,47 @@ else:
     # ----------------------------
     # 🍳 เมนูที่ทำในแต่ละวัน
     # ----------------------------
-        with tab6:
-            st.header("🍳 บันทึกเมนูที่ทำในแต่ละวัน")
-            cooking_date = st.date_input("📅 วันที่ทำอาหาร", value=datetime.date.today(), key="cooking_date")
+    with tab6:
+        st.header("🍳 บันทึกเมนูที่ทำในแต่ละวัน")
+        cooking_date = st.date_input("📅 วันที่ทำอาหาร", value=datetime.date.today(), key="cooking_date")
+        cooking_date_str = str(cooking_date)
 
-            all_recipes = db.child("recipes").child(hotel).get().val() or {}
-            recipe_options = [r["name"] for r in all_recipes.values()] if all_recipes else []
+        all_recipes = db.child("recipes").child(hotel).get().val() or {}
+        recipe_options = [r["name"] for r in all_recipes.values()] if all_recipes else []
 
-            if "daily_menu" not in st.session_state:
-                st.session_state["daily_menu"] = []
+        # 👉 โหลดเมนูที่เคยบันทึกไว้ในวันนั้น
+        previous_menus_data = db.child("daily_cooked_menu").child(hotel).child(cooking_date_str).get().val()
+        previously_saved_menus = previous_menus_data.get("menus", []) if previous_menus_data else []
 
-            st.subheader("➕ เพิ่มเมนูที่ทำ")
+        if f"daily_menu_{cooking_date_str}" not in st.session_state:
+            st.session_state[f"daily_menu_{cooking_date_str}"] = previously_saved_menus
 
-            with st.form("add_menu_form", clear_on_submit=True):
-                menu = st.selectbox("🍽 เลือกเมนู", recipe_options, key="menu_select")
-                submitted = st.form_submit_button("➕ เพิ่ม")
+        st.subheader("➕ เพิ่มเมนูที่ทำ")
 
-                if submitted and menu:
-                    st.session_state["daily_menu"].append(menu)
+        with st.form("add_menu_form", clear_on_submit=True):
+            menu = st.selectbox("🍽 เลือกเมนู", recipe_options, key=f"menu_select_{cooking_date_str}")
+            submitted = st.form_submit_button("➕ เพิ่ม")
 
-            if st.session_state["daily_menu"]:
-                st.subheader("📋 เมนูที่เพิ่ม")
-                for idx, m in enumerate(st.session_state["daily_menu"]):
-                    st.write(f"✅ {m}")
-                    if st.button(f"❌ ลบเมนู", key=f"delete_menu_{idx}"):
-                        st.session_state["daily_menu"].pop(idx)
-                        st.rerun()
+            if submitted and menu and menu not in st.session_state[f"daily_menu_{cooking_date_str}"]:
+                st.session_state[f"daily_menu_{cooking_date_str}"].append(menu)
+                # ✅ บันทึกทันที
+                db.child("daily_cooked_menu").child(hotel).child(cooking_date_str).set({
+                    "menus": st.session_state[f"daily_menu_{cooking_date_str}"],
+                    "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                })
+                st.success("✅ เพิ่มเมนูและบันทึกเรียบร้อยแล้ว")
+                st.rerun()
 
-                if st.button("📝 บันทึกเมนูทั้งหมด"):
-                    db.child("daily_cooked_menu").child(hotel).child(str(cooking_date)).set({
-                        "menus": st.session_state["daily_menu"],
+        if st.session_state[f"daily_menu_{cooking_date_str}"]:
+            st.subheader("📋 เมนูที่เพิ่ม")
+            for idx, m in enumerate(st.session_state[f"daily_menu_{cooking_date_str}"]):
+                st.write(f"✅ {m}")
+                if st.button(f"❌ ลบเมนู {m}", key=f"delete_menu_{cooking_date_str}_{idx}"):
+                    st.session_state[f"daily_menu_{cooking_date_str}"].pop(idx)
+                    # ✅ บันทึกทันทีหลังลบ
+                    db.child("daily_cooked_menu").child(hotel).child(cooking_date_str).set({
+                        "menus": st.session_state[f"daily_menu_{cooking_date_str}"],
                         "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     })
-                    st.success("✅ บันทึกเมนูทั้งหมดเรียบร้อยแล้ว")
-                    st.session_state["daily_menu"] = []
+                    st.success(f"🗑 ลบเมนู '{m}' และบันทึกแล้ว")
                     st.rerun()
-
-
