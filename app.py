@@ -378,6 +378,18 @@ else:
                     "qty": qty,
                     "unit": unit
                 })
+
+                db.child("ingredient_stock").child(hotel).child(purchase_date_str).set({
+                    str(i): {
+                        "name": ing["name"],
+                        "qty": ing["qty"],
+                        "unit": ing["unit"],
+                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    } for i, ing in enumerate(st.session_state[f"ingredients_{purchase_date_str}"])
+                    if isinstance(ing, dict) and all(k in ing for k in ["name", "qty", "unit"])
+                })
+
+                st.success("✅ เพิ่มและบันทึกเรียบร้อยแล้ว")
                 st.rerun()
 
         if st.session_state[f"ingredients_{purchase_date_str}"]:
@@ -390,20 +402,19 @@ else:
                 st.write(f"🟩 {ing['name']} - {ing['qty']} {ing['unit']}")
                 if st.button(f"❌ ลบ {ing['name']}", key=f"delete_ing_{purchase_date_str}_{idx}"):
                     st.session_state[f"ingredients_{purchase_date_str}"].pop(idx)
-                    st.rerun()
 
-            if st.button("📌 บันทึกทั้งหมด"):
-                db.child("ingredient_stock").child(hotel).child(purchase_date_str).set({
-                    str(i): {
-                        "name": ing["name"],
-                        "qty": ing["qty"],
-                        "unit": ing["unit"],
-                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    } for i, ing in enumerate(st.session_state[f"ingredients_{purchase_date_str}"])
-                    if isinstance(ing, dict) and all(k in ing for k in ["name", "qty", "unit"])
-                })
-                st.success("✅ บันทึกวัตถุดิบทั้งหมดเรียบร้อยแล้ว")
-                st.rerun()
+                    db.child("ingredient_stock").child(hotel).child(purchase_date_str).set({
+                        str(i): {
+                            "name": ing["name"],
+                            "qty": ing["qty"],
+                            "unit": ing["unit"],
+                            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        } for i, ing in enumerate(st.session_state[f"ingredients_{purchase_date_str}"])
+                        if isinstance(ing, dict) and all(k in ing for k in ["name", "qty", "unit"])
+                    })
+
+                    st.success(f"✅ ลบ {ing['name']} เรียบร้อยแล้ว")
+                    st.rerun()
 
         # ----------------------------
         # 📊 แสดงวัตถุดิบคงเหลือ
@@ -412,6 +423,8 @@ else:
         st.subheader("📉 คำนวณวัตถุดิบคงเหลือวันนี้")
         selected_report_date = st.date_input("เลือกวันที่ต้องการดูยอดคงเหลือ", value=datetime.date.today(), key="stock_balance_date")
         selected_report_str = selected_report_date.strftime('%Y-%m-%d')
+
+        search_term = st.text_input("🔍 ค้นหาวัตถุดิบในคงเหลือ")
 
         purchases = db.child("ingredient_stock").child(hotel).get().val() or {}
         total_stock = {}
@@ -462,6 +475,8 @@ else:
         st.subheader("📦 คงเหลือวัตถุดิบ ณ วันที่เลือก")
         if total_stock:
             for name in sorted(total_stock):
+                if search_term and search_term.lower() not in name.lower():
+                    continue
                 bought = total_stock.get(name, 0)
                 used = used_ingredients.get(name, 0)
                 remaining = bought - used
@@ -474,6 +489,7 @@ else:
                     st.rerun()
         else:
             st.info("ไม่มีข้อมูลวัตถุดิบในระบบ")
+
 
     # ----------------------------
     # 🍳 เมนูที่ทำในแต่ละวัน
