@@ -195,9 +195,10 @@ else:
     with tab3:
         st.header("📋 งานที่คุณทำวันนี้")
 
-        # ใช้ timestamp เป็นชื่อ key
         user_id = st.session_state["user"]["localId"]
-        today = datetime.datetime.now().strftime('%Y-%m-%d')
+        today = datetime.date.today()
+        today_str = today.strftime('%Y-%m-%d')
+
         task = st.text_area("คุณทำอะไรไปบ้างในวันนี้")
 
         if st.button("📝 บันทึกงานวันนี้"):
@@ -206,7 +207,7 @@ else:
                     "task": task,
                     "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                 }
-                db.child("work_logs").child(hotel).child(today).child(user_id).set(log)
+                db.child("work_logs").child(hotel).child(today_str).child(user_id).set(log)
                 st.success("✅ บันทึกงานวันนี้เรียบร้อยแล้ว")
                 st.rerun()
             else:
@@ -214,13 +215,27 @@ else:
 
         st.divider()
         st.subheader("📆 งานที่บันทึกไว้แล้ว")
-        logs = db.child("work_logs").child(hotel).child(today).get().val() or {}
 
-        for uid, entry in logs.items():
-            st.markdown(f"👤 **พนักงาน ID:** `{uid}`")
-            st.caption(f"🕒 {entry['timestamp']}")
-            st.write(entry["task"])
-            st.divider()
+        # 📅 เพิ่มตัวเลือกวันที่
+        selected_date = st.date_input("เลือกวันที่ที่ต้องการดูงาน", value=today, key="worklog_date")
+        selected_date_str = selected_date.strftime('%Y-%m-%d')
+
+        logs = db.child("work_logs").child(hotel).child(selected_date_str).get().val() or {}
+
+        if logs:
+            for uid, entry in logs.items():
+                st.markdown(f"👤 **พนักงาน ID:** `{uid}`")
+                st.caption(f"🕒 {entry['timestamp']}")
+                st.write(entry["task"])
+
+                if st.button(f"🗑 ลบงานของ {uid}", key=f"delete_task_{selected_date_str}_{uid}"):
+                    db.child("work_logs").child(hotel).child(selected_date_str).child(uid).remove()
+                    st.success(f"🗑 ลบงานของพนักงาน ID {uid} แล้วเรียบร้อย")
+                    st.rerun()
+
+                st.divider()
+        else:
+            st.info("🔎 ยังไม่มีงานที่บันทึกไว้สำหรับวันนี้")
 
     # ----------------------------
     # 📋 รายงานห้องพักประจำวัน
@@ -335,12 +350,16 @@ else:
     # ----------------------------
     with tab5:
         st.header("📦 บันทึกการซื้อวัตถุดิบ")
-        purchase_date = st.date_input("🗓 วันที่ซื้อวัตถุดิบ", value=datetime.date.today(), key="purchase_date")
+        purchase_date = st.date_input("🎓 วันที่ซื้อวัตถุดิบ", value=datetime.date.today(), key="purchase_date")
         purchase_date_str = str(purchase_date)
 
-        # โหลดข้อมูลวัตถุดิบที่เคยบันทึกไว้ในวันนั้น
         previous_data = db.child("ingredient_stock").child(hotel).child(purchase_date_str).get().val() or {}
-        previously_saved = list(previous_data.values())
+        if isinstance(previous_data, dict):
+            previously_saved = list(previous_data.values())
+        elif isinstance(previous_data, list):
+            previously_saved = previous_data
+        else:
+            previously_saved = []
 
         if f"ingredients_{purchase_date_str}" not in st.session_state:
             st.session_state[f"ingredients_{purchase_date_str}"] = previously_saved
@@ -363,22 +382,21 @@ else:
                 st.rerun()
 
         if st.session_state[f"ingredients_{purchase_date_str}"]:
-            st.subheader("📋 รายการวัตถุดิบที่เพิ่มแล้ว")
+            st.subheader("👍 รายการวัตถุดิบที่เพิ่มแล้ว")
             for idx, ing in enumerate(st.session_state[f"ingredients_{purchase_date_str}"]):
-                st.write(f"🟩 {ing['name']} - {ing['qty']} {ing['unit']}")
+                st.write(f"🕩 {ing['name']} - {ing['qty']} {ing['unit']}")
                 if st.button(f"❌ ลบ {ing['name']}", key=f"delete_ing_{purchase_date_str}_{idx}"):
                     st.session_state[f"ingredients_{purchase_date_str}"].pop(idx)
                     st.rerun()
 
-            if st.button("💾 บันทึกทั้งหมด"):
+            if st.button("📌 บันทึกทั้งหมด"):
                 db.child("ingredient_stock").child(hotel).child(purchase_date_str).set({
                     str(i): {
                         "name": ing["name"],
                         "qty": ing["qty"],
                         "unit": ing["unit"],
                         "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                    for i, ing in enumerate(st.session_state[f"ingredients_{purchase_date_str}"])
+                    } for i, ing in enumerate(st.session_state[f"ingredients_{purchase_date_str}"])
                 })
                 st.success("✅ บันทึกวัตถุดิบทั้งหมดเรียบร้อยแล้ว")
                 st.rerun()
@@ -391,19 +409,29 @@ else:
         selected_report_date = st.date_input("เลือกวันที่ต้องการดูยอดคงเหลือ", value=datetime.date.today(), key="stock_balance_date")
         selected_report_str = selected_report_date.strftime('%Y-%m-%d')
 
-        # รวมวัตถุดิบที่ซื้อทั้งหมดจนถึงวันที่เลือก
         purchases = db.child("ingredient_stock").child(hotel).get().val() or {}
         total_stock = {}
+        item_keys = {}  # สำหรับเก็บ key ของวัตถุดิบแต่ละวันเพื่อใช้ลบได้ถูก
+
         for date_str, entries in purchases.items():
             if date_str <= selected_report_str:
-                for _, entry in entries.items():
-                    name = entry.get("name")
-                    qty = entry.get("qty", 0)
-                    unit = entry.get("unit", "กรัม")
-                    qty_in_grams = qty * 1000 if unit == "กิโลกรัม" else qty
-                    total_stock[name] = total_stock.get(name, 0) + qty_in_grams
+                if isinstance(entries, dict):
+                    for key, entry in entries.items():
+                        name = entry.get("name")
+                        qty = entry.get("qty", 0)
+                        unit = entry.get("unit", "กรัม")
+                        qty_in_grams = qty * 1000 if unit == "กิโลกรัม" else qty
+                        total_stock[name] = total_stock.get(name, 0) + qty_in_grams
+                        item_keys.setdefault(name, []).append((date_str, key))
+                elif isinstance(entries, list):
+                    for idx, entry in enumerate(entries):
+                        name = entry.get("name")
+                        qty = entry.get("qty", 0)
+                        unit = entry.get("unit", "กรัม")
+                        qty_in_grams = qty * 1000 if unit == "กิโลกรัม" else qty
+                        total_stock[name] = total_stock.get(name, 0) + qty_in_grams
+                        item_keys.setdefault(name, []).append((date_str, str(idx)))
 
-        # รวมวัตถุดิบที่ใช้จากเมนูที่ทำ
         daily_menus = db.child("daily_cooked_menu").child(hotel).get().val() or {}
         recipes = db.child("recipes").child(hotel).get().val() or {}
 
@@ -421,14 +449,19 @@ else:
                                 qty_in_grams = ing_qty * 1000 if ing_unit == "กิโลกรัม" else ing_qty
                                 used_ingredients[ing_name] = used_ingredients.get(ing_name, 0) + qty_in_grams
 
-        # คำนวณคงเหลือ
         st.subheader("📦 คงเหลือวัตถุดิบ ณ วันที่เลือก")
         if total_stock:
             for name in sorted(total_stock):
                 bought = total_stock.get(name, 0)
                 used = used_ingredients.get(name, 0)
                 remaining = bought - used
-                st.write(f"{name}: {remaining:.2f} กรัม (มีทั้งหมด {bought:.2f}, ใช้ไป {used:.2f})")
+                st.write(f"{name}: {remaining:.2f} กรัม ( มีทั้งหมด {bought:.2f}, ใช้ไป {used:.2f} )")
+
+                if st.button(f"🗑 ลบวัตถุดิบ '{name}'", key=f"delete_stock_{name}_{selected_report_str}"):
+                    for date_str, key_list in item_keys.get(name, []):
+                        db.child("ingredient_stock").child(hotel).child(date_str).child(key_list).remove()
+                    st.success(f"✅ ลบ '{name}' จากรายการวัตถุดิบแล้ว")
+                    st.rerun()
         else:
             st.info("ไม่มีข้อมูลวัตถุดิบในระบบ")
 
@@ -472,10 +505,16 @@ else:
                 st.write(f"✅ {m}")
                 if st.button(f"❌ ลบเมนู {m}", key=f"delete_menu_{cooking_date_str}_{idx}"):
                     st.session_state[f"daily_menu_{cooking_date_str}"].pop(idx)
-                    # ✅ บันทึกทันทีหลังลบ
-                    db.child("daily_cooked_menu").child(hotel).child(cooking_date_str).set({
-                        "menus": st.session_state[f"daily_menu_{cooking_date_str}"],
-                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    })
-                    st.success(f"🗑 ลบเมนู '{m}' และบันทึกแล้ว")
+
+                    if st.session_state[f"daily_menu_{cooking_date_str}"]:
+                        # ยังมีเมนูเหลือ -> อัปเดตใน Firebase
+                        db.child("daily_cooked_menu").child(hotel).child(cooking_date_str).set({
+                            "menus": st.session_state[f"daily_menu_{cooking_date_str}"],
+                            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        })
+                    else:
+                        # ไม่มีเมนูเหลือ -> ลบทั้งวันที่ออกจาก Firebase
+                        db.child("daily_cooked_menu").child(hotel).child(cooking_date_str).remove()
+
+                    st.success(f"🗑 ลบเมนู '{m}' และอัปเดตข้อมูลแล้ว")
                     st.rerun()
