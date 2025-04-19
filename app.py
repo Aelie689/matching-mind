@@ -365,7 +365,6 @@ else:
             st.session_state[f"ingredients_{purchase_date_str}"] = previously_saved
 
         st.subheader("➕ เพิ่มรายการวัตถุดิบ")
-
         with st.form("add_ingredient_form", clear_on_submit=True):
             cols = st.columns([3, 2, 2])
             name = cols[0].text_input("ชื่อวัตถุดิบ", key=f"ing_name_{purchase_date_str}")
@@ -384,7 +383,11 @@ else:
         if st.session_state[f"ingredients_{purchase_date_str}"]:
             st.subheader("👍 รายการวัตถุดิบที่เพิ่มแล้ว")
             for idx, ing in enumerate(st.session_state[f"ingredients_{purchase_date_str}"]):
-                st.write(f"🕩 {ing['name']} - {ing['qty']} {ing['unit']}")
+                if not isinstance(ing, dict):
+                    continue
+                if not all(k in ing for k in ["name", "qty", "unit"]):
+                    continue
+                st.write(f"🟩 {ing['name']} - {ing['qty']} {ing['unit']}")
                 if st.button(f"❌ ลบ {ing['name']}", key=f"delete_ing_{purchase_date_str}_{idx}"):
                     st.session_state[f"ingredients_{purchase_date_str}"].pop(idx)
                     st.rerun()
@@ -397,6 +400,7 @@ else:
                         "unit": ing["unit"],
                         "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     } for i, ing in enumerate(st.session_state[f"ingredients_{purchase_date_str}"])
+                    if isinstance(ing, dict) and all(k in ing for k in ["name", "qty", "unit"])
                 })
                 st.success("✅ บันทึกวัตถุดิบทั้งหมดเรียบร้อยแล้ว")
                 st.rerun()
@@ -411,12 +415,14 @@ else:
 
         purchases = db.child("ingredient_stock").child(hotel).get().val() or {}
         total_stock = {}
-        item_keys = {}  # สำหรับเก็บ key ของวัตถุดิบแต่ละวันเพื่อใช้ลบได้ถูก
+        item_keys = {}
 
         for date_str, entries in purchases.items():
             if date_str <= selected_report_str:
                 if isinstance(entries, dict):
                     for key, entry in entries.items():
+                        if not isinstance(entry, dict):
+                            continue
                         name = entry.get("name")
                         qty = entry.get("qty", 0)
                         unit = entry.get("unit", "กรัม")
@@ -425,6 +431,8 @@ else:
                         item_keys.setdefault(name, []).append((date_str, key))
                 elif isinstance(entries, list):
                     for idx, entry in enumerate(entries):
+                        if not isinstance(entry, dict):
+                            continue
                         name = entry.get("name")
                         qty = entry.get("qty", 0)
                         unit = entry.get("unit", "กรัม")
@@ -443,6 +451,8 @@ else:
                     for _, recipe in recipes.items():
                         if recipe.get("name") == menu:
                             for ing in recipe.get("ingredients", []):
+                                if not isinstance(ing, dict):
+                                    continue
                                 ing_name = ing.get("name")
                                 ing_qty = ing.get("qty", 0)
                                 ing_unit = ing.get("unit", "กรัม")
