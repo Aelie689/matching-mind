@@ -551,7 +551,7 @@ else:
     # ----------------------------
     with tab7:
         st.header("💰 รายรับรายวัน")
-        income_date = st.date_input("📅 วันที่รายรับ", value=datetime.date.today(), key="income_date")
+        income_date = st.date_input("📅 วันที่รายรับ", value=datetime.date.today(), key="income_date_key")
         income_date_str = str(income_date)
 
         for section in ["front", "bar"]:
