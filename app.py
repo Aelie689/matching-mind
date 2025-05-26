@@ -8,18 +8,16 @@ auth = firebase.auth()
 db = firebase.database()
 
 # ----------------------------
-# ✅ โหลดรหัสลับจาก Firebase
+# ✅ ฟังก์ชันโหลดรหัสลับจาก Firebase
 # ----------------------------
 @st.cache_data(ttl=300)
-def load_hotel_secrets():
+def load_hotel_secrets(user_token):
     try:
-        data = db.child("hotel_secrets").get()
+        data = db.child("hotel_secrets").get(user_token)
         return data.val() if data.val() else {}
     except Exception as e:
         st.error(f"❌ โหลดรหัสลับไม่สำเร็จ: {e}")
         return {}
-
-HOTEL_SECRETS = load_hotel_secrets()
 
 # ----------------------------
 # ✅ ตรวจสอบ session login
@@ -30,9 +28,7 @@ if "user" not in st.session_state:
     menu = st.sidebar.selectbox("เลือกเมนู", ["เข้าสู่ระบบ", "สมัครสมาชิก"])
     email = st.sidebar.text_input("อีเมล")
     password = st.sidebar.text_input("รหัสผ่าน", type="password")
-
-    # ✅ ใช้ dropdown เลือกโรงแรม
-    hotel_name = st.sidebar.selectbox("เลือกโรงแรม", list(HOTEL_SECRETS.keys()) if HOTEL_SECRETS else [])
+    hotel_name = st.sidebar.text_input("ชื่อโรงแรม")
     hotel_secret = st.sidebar.text_input("รหัสลับประจำโรงแรม", type="password")
 
     if menu == "สมัครสมาชิก":
@@ -41,8 +37,6 @@ if "user" not in st.session_state:
                 st.sidebar.warning("⚠️ กรุณาใช้อีเมลที่ถูกต้อง")
             elif len(password) < 6:
                 st.sidebar.warning("⚠️ รหัสผ่านต้องมีอย่างน้อย 6 ตัว")
-            elif hotel_secret != HOTEL_SECRETS.get(hotel_name, ""):
-                st.sidebar.warning("❌ รหัสลับไม่ถูกต้อง")
             else:
                 try:
                     auth.create_user_with_email_and_password(email, password)
@@ -54,12 +48,17 @@ if "user" not in st.session_state:
         if st.sidebar.button("เข้าสู่ระบบ"):
             try:
                 user = auth.sign_in_with_email_and_password(email, password)
-                if hotel_secret != HOTEL_SECRETS.get(hotel_name, ""):
+
+                # ✅ โหลด hotel secrets ด้วย user token
+                secrets = load_hotel_secrets(user['idToken'])
+
+                if hotel_secret != secrets.get(hotel_name, ""):
                     st.sidebar.warning("❌ รหัสลับไม่ถูกต้อง")
                 else:
                     st.session_state["user"] = user
                     st.session_state["hotel"] = hotel_name
                     st.rerun()
+
             except Exception as e:
                 st.sidebar.error("❌ อีเมลหรือรหัสผ่านไม่ถูกต้อง")
 
