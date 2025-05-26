@@ -8,18 +8,6 @@ auth = firebase.auth()
 db = firebase.database()
 
 # ----------------------------
-# ✅ ฟังก์ชันโหลดรหัสลับจาก Firebase
-# ----------------------------
-@st.cache_data(ttl=300)
-def load_hotel_secrets(user_token):
-    try:
-        data = db.child("hotel_secrets").get(user_token)
-        return data.val() if data.val() else {}
-    except Exception as e:
-        st.error(f"❌ โหลดรหัสลับไม่สำเร็จ: {e}")
-        return {}
-
-# ----------------------------
 # ✅ ตรวจสอบ session login
 # ----------------------------
 if "user" not in st.session_state:
@@ -49,8 +37,8 @@ if "user" not in st.session_state:
             try:
                 user = auth.sign_in_with_email_and_password(email, password)
 
-                # ✅ โหลด hotel secrets ด้วย user token
-                secrets = load_hotel_secrets(user['idToken'])
+                # ✅ โหลด hotel_secrets หลัง login โดยใช้ token
+                secrets = db.child("hotel_secrets").get(user['idToken']).val() or {}
 
                 if hotel_secret != secrets.get(hotel_name, ""):
                     st.sidebar.warning("❌ รหัสลับไม่ถูกต้อง")
@@ -58,7 +46,6 @@ if "user" not in st.session_state:
                     st.session_state["user"] = user
                     st.session_state["hotel"] = hotel_name
                     st.rerun()
-
             except Exception as e:
                 st.sidebar.error("❌ อีเมลหรือรหัสผ่านไม่ถูกต้อง")
 
