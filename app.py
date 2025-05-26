@@ -551,20 +551,21 @@ else:
     # ----------------------------
     with tab7:
         st.header("💰 รายรับรายวัน")
-        income_date = st.date_input("📅 วันที่รายรับ", value=datetime.date.today(), key="income_date_key")
+        income_date = st.date_input("📅 วันที่รายรับ", value=datetime.date.today(), key="income_date_unique")
         income_date_str = str(income_date)
 
         for section in ["front", "bar"]:
             st.subheader(f"📍 รายรับจาก {'ฟรอนต์' if section == 'front' else 'บาร์'}")
             
-            if f"income_{section}_{income_date_str}" not in st.session_state:
-                st.session_state[f"income_{section}_{income_date_str}"] = []
+            key_list = f"income_{section}_{income_date_str}"
+            if key_list not in st.session_state:
+                st.session_state[key_list] = []
 
             with st.form(f"form_income_{section}", clear_on_submit=True):
                 cols = st.columns([3, 2, 2])
-                income_type = cols[0].text_input("ประเภท", key=f"type_{section}")
-                amount = cols[1].number_input("จำนวนเงิน (บาท)", min_value=0.0, step=1.0, key=f"amount_{section}")
-                method = cols[2].selectbox("วิธีรับเงิน", ["เงินสด", "โอน", "QR Code", "อื่น ๆ"], key=f"method_{section}")
+                income_type = cols[0].text_input("ประเภท", key=f"type_{section}_{income_date_str}")
+                amount = cols[1].number_input("จำนวนเงิน (บาท)", min_value=0.0, step=1.0, key=f"amount_{section}_{income_date_str}")
+                method = cols[2].selectbox("วิธีรับเงิน", ["เงินสด", "โอน", "QR Code", "อื่น ๆ"], key=f"method_{section}_{income_date_str}")
                 submitted = st.form_submit_button("➕ เพิ่มรายรับ")
 
                 if submitted and income_type and amount > 0:
@@ -574,25 +575,25 @@ else:
                         "method": method,
                         "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     }
-                    st.session_state[f"income_{section}_{income_date_str}"].append(new_income)
+                    st.session_state[key_list].append(new_income)
 
                     db.child("daily_income").child(hotel).child(income_date_str).child(section).set(
-                        st.session_state[f"income_{section}_{income_date_str}"]
+                        st.session_state[key_list]
                     )
 
                     st.success("✅ เพิ่มรายรับเรียบร้อยแล้ว")
                     st.rerun()
 
-            if st.session_state[f"income_{section}_{income_date_str}"]:
+            if st.session_state[key_list]:
                 st.markdown("### 🧾 รายการที่บันทึกไว้แล้ว")
                 total = 0
-                for idx, item in enumerate(st.session_state[f"income_{section}_{income_date_str}"]):
+                for idx, item in enumerate(st.session_state[key_list]):
                     st.write(f"- {item['type']} / {item['amount']} บาท ({item['method']})")
                     total += item["amount"]
-                    if st.button(f"❌ ลบรายการ", key=f"delete_income_{section}_{idx}"):
-                        st.session_state[f"income_{section}_{income_date_str}"].pop(idx)
+                    if st.button(f"❌ ลบรายการ", key=f"delete_income_{section}_{income_date_str}_{idx}"):
+                        st.session_state[key_list].pop(idx)
                         db.child("daily_income").child(hotel).child(income_date_str).child(section).set(
-                            st.session_state[f"income_{section}_{income_date_str}"]
+                            st.session_state[key_list]
                         )
                         st.success("✅ ลบรายการแล้ว")
                         st.rerun()
