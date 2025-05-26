@@ -13,7 +13,7 @@ if "user" not in st.session_state:
     st.sidebar.title("🔐 เข้าสู่ระบบหรือสมัคร")
 
     menu = st.sidebar.selectbox("เลือกเมนู", ["เข้าสู่ระบบ", "สมัครสมาชิก"])
-    email = st.sidebar.text_input("อีเมล")
+    email = st.sidebar.text_input("อีเมล").strip()
     password = st.sidebar.text_input("รหัสผ่าน", type="password")
 
     hotel_name = st.sidebar.text_input("ชื่อโรงแรม")
