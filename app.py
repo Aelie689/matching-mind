@@ -1,7 +1,6 @@
 import streamlit as st
 import pyrebase
 from firebase_config import firebase_config
-import datetime
 
 firebase = pyrebase.initialize_app(firebase_config)
 auth = firebase.auth()
@@ -12,34 +11,62 @@ db = firebase.database()
 # ----------------------------
 if "user" not in st.session_state:
     st.sidebar.title("🔐 เข้าสู่ระบบหรือสมัครสมาชิก")
+
     menu = st.sidebar.selectbox("เลือกเมนู", ["เข้าสู่ระบบ", "สมัครสมาชิก"])
     email = st.sidebar.text_input("อีเมล")
     password = st.sidebar.text_input("รหัสผ่าน", type="password")
 
-    if menu == "เข้าสู่ระบบ":
+    # ใช้ input กรอกชื่อโรงแรม (เพราะยังไม่ได้ login เลยโหลด hotel_secrets ไม่ได้)
+    hotel_name = st.sidebar.text_input("ชื่อโรงแรม")
+    hotel_secret = st.sidebar.text_input("รหัสลับประจำโรงแรม", type="password")
+
+    if menu == "สมัครสมาชิก":
+        if st.sidebar.button("สมัครสมาชิก"):
+            if "@" not in email or "." not in email:
+                st.sidebar.warning("⚠️ กรุณาใช้อีเมลที่ถูกต้อง")
+            elif len(password) < 6:
+                st.sidebar.warning("⚠️ รหัสผ่านต้องมีอย่างน้อย 6 ตัว")
+            else:
+                try:
+                    # สมัครและล็อกอินทันทีเพื่อโหลด secrets
+                    auth.create_user_with_email_and_password(email, password)
+                    user = auth.sign_in_with_email_and_password(email, password)
+
+                    secrets = db.child("hotel_secrets").get(user['idToken']).val() or {}
+
+                    if hotel_secret != secrets.get(hotel_name, ""):
+                        st.sidebar.warning("❌ รหัสลับไม่ถูกต้อง")
+                    else:
+                        st.session_state["user"] = user
+                        st.session_state["hotel"] = hotel_name
+                        st.sidebar.success("✅ สมัครและเข้าสู่ระบบเรียบร้อยแล้ว")
+                        st.rerun()
+                except Exception as e:
+                    st.sidebar.error(f"เกิดข้อผิดพลาด: {e}")
+
+    elif menu == "เข้าสู่ระบบ":
         if st.sidebar.button("เข้าสู่ระบบ"):
             try:
                 user = auth.sign_in_with_email_and_password(email, password)
-                # 👉 เก็บ user และโหลด secrets พร้อม rerun
-                st.session_state["user"] = user
-                st.session_state["secrets"] = db.child("hotel_secrets").get(user['idToken']).val() or {}
-                st.rerun()
-            except:
+                secrets = db.child("hotel_secrets").get(user['idToken']).val() or {}
+
+                if hotel_secret != secrets.get(hotel_name, ""):
+                    st.sidebar.warning("❌ รหัสลับไม่ถูกต้อง")
+                else:
+                    st.session_state["user"] = user
+                    st.session_state["hotel"] = hotel_name
+                    st.rerun()
+            except Exception as e:
                 st.sidebar.error("❌ อีเมลหรือรหัสผ่านไม่ถูกต้อง")
 
+# ----------------------------
+# ✅ ผู้ใช้เข้าสู่ระบบแล้ว
+# ----------------------------
 else:
-    # ✅ ผู้ใช้ล็อกอินแล้ว
-    st.sidebar.success("🎉 เข้าสู่ระบบแล้ว")
-    secrets = st.session_state.get("secrets", {})
-    hotel_name = st.sidebar.selectbox("เลือกโรงแรม", list(secrets.keys()))
-    hotel_secret = st.sidebar.text_input("รหัสลับ", type="password")
-
-    if st.sidebar.button("ยืนยันโรงแรม"):
-        if hotel_secret == secrets.get(hotel_name, ""):
-            st.session_state["hotel"] = hotel_name
-            st.rerun()
-        else:
-            st.sidebar.error("❌ รหัสลับไม่ถูกต้อง")
+    st.sidebar.success(f"🎉 เข้าสู่ระบบแล้ว: {st.session_state['hotel']}")
+    if st.sidebar.button("ออกจากระบบ"):
+        st.session_state.clear()
+        st.rerun()
 
     hotel = st.session_state["hotel"]
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
