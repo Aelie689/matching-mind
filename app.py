@@ -16,10 +16,11 @@ if "user" not in st.session_state:
     menu = st.sidebar.selectbox("เลือกเมนู", ["เข้าสู่ระบบ", "สมัครสมาชิก"])
     email = st.sidebar.text_input("อีเมล")
     password = st.sidebar.text_input("รหัสผ่าน", type="password")
-    hotel_name = st.sidebar.text_input("ชื่อโรงแรม")
-    hotel_secret = st.sidebar.text_input("รหัสลับประจำโรงแรม", type="password")
 
     if menu == "สมัครสมาชิก":
+        hotel_name = st.sidebar.text_input("ชื่อโรงแรม")
+        hotel_secret = st.sidebar.text_input("รหัสลับประจำโรงแรม", type="password")
+
         if st.sidebar.button("สมัครสมาชิก"):
             if "@" not in email or "." not in email:
                 st.sidebar.warning("⚠️ กรุณาใช้อีเมลที่ถูกต้อง")
@@ -37,15 +38,23 @@ if "user" not in st.session_state:
             try:
                 user = auth.sign_in_with_email_and_password(email, password)
 
-                # ✅ โหลด hotel_secrets หลัง login โดยใช้ token
+                # ✅ โหลด hotel secrets ด้วย token หลัง login
                 secrets = db.child("hotel_secrets").get(user['idToken']).val() or {}
 
-                if hotel_secret != secrets.get(hotel_name, ""):
-                    st.sidebar.warning("❌ รหัสลับไม่ถูกต้อง")
+                if not secrets:
+                    st.sidebar.error("🚫 ไม่พบข้อมูลโรงแรม")
                 else:
-                    st.session_state["user"] = user
-                    st.session_state["hotel"] = hotel_name
-                    st.rerun()
+                    # ✅ ให้ผู้ใช้เลือกโรงแรมจาก dropdown
+                    hotel_name = st.sidebar.selectbox("เลือกโรงแรม", list(secrets.keys()))
+                    hotel_secret = st.sidebar.text_input("รหัสลับประจำโรงแรม", type="password")
+
+                    if hotel_secret == secrets.get(hotel_name, ""):
+                        st.session_state["user"] = user
+                        st.session_state["hotel"] = hotel_name
+                        st.rerun()
+                    else:
+                        st.sidebar.warning("❌ รหัสลับไม่ถูกต้อง")
+
             except Exception as e:
                 st.sidebar.error("❌ อีเมลหรือรหัสผ่านไม่ถูกต้อง")
 
