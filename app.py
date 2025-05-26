@@ -516,16 +516,19 @@ else:
     # ----------------------------
     with tab7:
         st.header("💰 รายรับรายวัน")
-        income_date = st.date_input("📅 วันที่รายรับ", value=datetime.date.today(), key="income_date_unique")
+        income_date = st.date_input("📅 วันที่รายรับ", value=datetime.date.today(), key="income_date")
         income_date_str = str(income_date)
 
         for section in ["front", "bar"]:
             st.subheader(f"📍 รายรับจาก {'ฟรอนต์' if section == 'front' else 'บาร์'}")
-            
             key_list = f"income_{section}_{income_date_str}"
-            if key_list not in st.session_state:
-                st.session_state[key_list] = []
 
+            # ✅ โหลดข้อมูลที่เคยบันทึกไว้จาก Firebase ถ้ายังไม่มีใน session_state
+            if key_list not in st.session_state:
+                firebase_data = db.child("daily_income").child(hotel).child(income_date_str).child(section).get().val()
+                st.session_state[key_list] = firebase_data if isinstance(firebase_data, list) else []
+
+            # 📄 แบบฟอร์มกรอกข้อมูลใหม่
             with st.form(f"form_income_{section}", clear_on_submit=True):
                 cols = st.columns([3, 2, 2])
                 income_type = cols[0].text_input("ประเภท", key=f"type_{section}_{income_date_str}")
@@ -542,13 +545,14 @@ else:
                     }
                     st.session_state[key_list].append(new_income)
 
+                    # ✅ บันทึกไป Firebase
                     db.child("daily_income").child(hotel).child(income_date_str).child(section).set(
                         st.session_state[key_list]
                     )
-
                     st.success("✅ เพิ่มรายรับเรียบร้อยแล้ว")
                     st.rerun()
 
+            # ✅ แสดงรายการที่บันทึกไว้แล้ว
             if st.session_state[key_list]:
                 st.markdown("### 🧾 รายการที่บันทึกไว้แล้ว")
                 total = 0
@@ -563,3 +567,5 @@ else:
                         st.success("✅ ลบรายการแล้ว")
                         st.rerun()
                 st.info(f"💵 รวมรายรับทั้งหมด: {total:.2f} บาท")
+            else:
+                st.info("🔍 ยังไม่มีรายการรายรับที่บันทึกไว้")
