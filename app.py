@@ -30,7 +30,7 @@ if "user" not in st.session_state:
     menu = st.sidebar.selectbox("เลือกเมนู", ["เข้าสู่ระบบ", "สมัครสมาชิก"])
     email = st.sidebar.text_input("อีเมล")
     password = st.sidebar.text_input("รหัสผ่าน", type="password")
-    hotel_name = st.sidebar.selectbox("เลือกโรงแรม", list(HOTEL_SECRETS.keys()))
+    hotel_name = st.sidebar.text_input("ชื่อโรงแรม")  # 👉 ป้อนเองตอน login/signup
     hotel_secret = st.sidebar.text_input("รหัสลับประจำโรงแรม", type="password")
 
     if menu == "สมัครสมาชิก":
@@ -39,8 +39,6 @@ if "user" not in st.session_state:
                 st.sidebar.warning("⚠️ กรุณาใช้อีเมลที่ถูกต้อง")
             elif len(password) < 6:
                 st.sidebar.warning("⚠️ รหัสผ่านต้องมีอย่างน้อย 6 ตัว")
-            elif hotel_secret != HOTEL_SECRETS.get(hotel_name, ""):
-                st.sidebar.warning("❌ รหัสลับไม่ถูกต้อง")
             else:
                 try:
                     auth.create_user_with_email_and_password(email, password)
@@ -53,7 +51,7 @@ if "user" not in st.session_state:
             try:
                 user = auth.sign_in_with_email_and_password(email, password)
 
-                # ✅ โหลด hotel_secrets หลังจาก login สำเร็จ
+                # ✅ โหลด hotel secrets หลัง login
                 secrets = db.child("hotel_secrets").get(user['idToken']).val() or {}
 
                 if hotel_secret != secrets.get(hotel_name, ""):
