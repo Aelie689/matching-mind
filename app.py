@@ -10,13 +10,12 @@ db = firebase.database()
 # ✅ ตรวจสอบ session login
 # ----------------------------
 if "user" not in st.session_state:
-    st.sidebar.title("🔐 เข้าสู่ระบบหรือสมัครสมาชิก")
+    st.sidebar.title("🔐 เข้าสู่ระบบหรือสมัคร")
 
     menu = st.sidebar.selectbox("เลือกเมนู", ["เข้าสู่ระบบ", "สมัครสมาชิก"])
     email = st.sidebar.text_input("อีเมล")
     password = st.sidebar.text_input("รหัสผ่าน", type="password")
 
-    # ใช้ input กรอกชื่อโรงแรม (เพราะยังไม่ได้ login เลยโหลด hotel_secrets ไม่ได้)
     hotel_name = st.sidebar.text_input("ชื่อโรงแรม")
     hotel_secret = st.sidebar.text_input("รหัสลับประจำโรงแรม", type="password")
 
@@ -28,7 +27,6 @@ if "user" not in st.session_state:
                 st.sidebar.warning("⚠️ รหัสผ่านต้องมีอย่างน้อย 6 ตัว")
             else:
                 try:
-                    # สมัครและล็อกอินทันทีเพื่อโหลด secrets
                     auth.create_user_with_email_and_password(email, password)
                     user = auth.sign_in_with_email_and_password(email, password)
 
