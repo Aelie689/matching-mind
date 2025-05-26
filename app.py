@@ -19,7 +19,7 @@ def load_hotel_secrets():
         st.error(f"❌ โหลดรหัสลับไม่สำเร็จ: {e}")
         return {}
 
-HOTEL_SECRETS = load_hotel_secrets()
+#HOTEL_SECRETS = load_hotel_secrets()
 
 # ----------------------------
 # ✅ ตรวจสอบ session login
@@ -52,7 +52,11 @@ if "user" not in st.session_state:
         if st.sidebar.button("เข้าสู่ระบบ"):
             try:
                 user = auth.sign_in_with_email_and_password(email, password)
-                if hotel_secret != HOTEL_SECRETS.get(hotel_name, ""):
+
+                # ✅ โหลด hotel_secrets หลังจาก login สำเร็จ
+                secrets = db.child("hotel_secrets").get(user['idToken']).val() or {}
+
+                if hotel_secret != secrets.get(hotel_name, ""):
                     st.sidebar.warning("❌ รหัสลับไม่ถูกต้อง")
                 else:
                     st.session_state["user"] = user
