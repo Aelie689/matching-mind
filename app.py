@@ -288,8 +288,8 @@ else:
 
         col1, col2, col3 = st.columns(3)
         col1.metric("👥 ผู้เข้าพักทั้งหมด", total_guest)
-        col2.metric("🧍‍♂️ ผู้ใหญ่ที่รับ ABF", total_adult)
-        col3.metric("🧒 เด็กที่รับ ABF", total_child)
+        col2.metric("🧍‍♂️ ผู้ใหญ่", total_adult)
+        col3.metric("🧒 เด็ก", total_child)
 
         if st.button("💾 บันทึกรายงานห้องพัก"):
             for row in edited_df:
