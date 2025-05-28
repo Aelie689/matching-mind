@@ -533,7 +533,7 @@ else:
                 cols = st.columns([3, 2, 2])
                 income_type = cols[0].text_input("ประเภท", key=f"type_{section}_{income_date_str}")
                 amount = cols[1].number_input("จำนวนเงิน (บาท)", min_value=0.0, step=1.0, key=f"amount_{section}_{income_date_str}")
-                method = cols[2].selectbox("วิธีรับเงิน", ["เงินสด", "โอน", "QR Code", "อื่น ๆ"], key=f"method_{section}_{income_date_str}")
+                method = cols[2].selectbox("วิธีรับเงิน", ["เงินสด", "โอน", "บัตร", "อื่น ๆ"], key=f"method_{section}_{income_date_str}")
                 submitted = st.form_submit_button("➕ เพิ่มรายรับ")
 
                 if submitted and income_type and amount > 0:
