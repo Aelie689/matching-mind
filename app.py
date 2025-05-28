@@ -2,6 +2,7 @@ import streamlit as st
 import pyrebase
 from firebase_config import firebase_config
 import datetime
+import math
 
 firebase = pyrebase.initialize_app(firebase_config)
 auth = firebase.auth()
@@ -74,6 +75,7 @@ else:
     selected_tab = st.selectbox("📁 เลือกเมนูหลัก", [
     "👩‍🍳 สูตรอาหารในครัว",
     "📋 บันทึกงานประจำวัน",
+    "🕒 ลงเวลางาน",
     "📑 รายงานห้องพัก",
     "📦 บันทึกวัตถุดิบ",
     "🍳 เมนูที่ทำในแต่ละวัน",
@@ -202,6 +204,82 @@ else:
                 st.divider()
         else:
             st.info("🔎 ยังไม่มีงานที่บันทึกไว้สำหรับวันนี้")
+
+
+    # ----------------------------
+    # ⏱ ลงเวลางานเข้า-ออก
+    # ----------------------------
+    elif selected_tab == "🕒 ลงเวลางาน":
+        st.header("🕒 ลงเวลางาน")
+
+        selected_date = st.date_input("📅 เลือกวันที่ต้องการลงเวลา", value=datetime.date.today())
+        selected_date_str = selected_date.strftime('%Y-%m-%d')
+
+        name = st.text_input("👤 ชื่อพนักงาน")
+        col1, col2 = st.columns(2)
+
+        if col1.button("✅ ลงเวลาเข้า"):
+            if name:
+                db.child("attendance").child(hotel).child(selected_date_str).child(name).update({
+                    "in_time": datetime.datetime.now().strftime("%H:%M:%S")
+                })
+                st.success(f"✅ ลงเวลาเข้าเรียบร้อยแล้วสำหรับ {name}")
+                st.rerun()
+            else:
+                st.warning("⚠️ กรุณากรอกชื่อก่อนลงเวลาเข้า")
+
+        if col2.button("📄 ลงเวลาออก"):
+            if name:
+                db.child("attendance").child(hotel).child(selected_date_str).child(name).update({
+                    "out_time": datetime.datetime.now().strftime("%H:%M:%S")
+                })
+                st.success(f"📄 ลงเวลาออกเรียบร้อยแล้วสำหรับ {name}")
+                st.rerun()
+            else:
+                st.warning("⚠️ กรุณากรอกชื่อก่อนลงเวลาออก")
+
+        st.divider()
+        st.subheader("📅 ตารางลงเวลา")
+
+        records = db.child("attendance").child(hotel).child(selected_date_str).get().val() or {}
+        if records:
+            for emp_name, times in records.items():
+                in_time = times.get("in_time", "-")
+                out_time = times.get("out_time", "-")
+                st.write(f"👤 {emp_name} | ⏱ เข้า: {in_time} | 📄 ออก: {out_time}")
+        else:
+            st.info("ยังไม่มีพนักงานลงเวลาในวันนี้")
+
+        st.divider()
+        st.subheader("📆 สรุปเวลาทำงานรายเดือน")
+
+        selected_emp = st.text_input("🔍 พิมพ์ชื่อพนักงาน")
+        selected_month = st.date_input("🕒 เลือกเดือน", value=datetime.date.today(), key="month_select")
+
+        if selected_emp:
+            month_prefix = selected_month.strftime("%Y-%m")  # eg: 2025-06
+            all_data = db.child("attendance").child(hotel).get().val() or {}
+
+            total_hours = datetime.timedelta()
+
+            for date_str, day_records in all_data.items():
+                if date_str.startswith(month_prefix):
+                    times = day_records.get(selected_emp, {})
+                    in_time_str = times.get("in_time")
+                    out_time_str = times.get("out_time")
+
+                    if in_time_str and out_time_str:
+                        try:
+                            in_time = datetime.datetime.strptime(f"{date_str} {in_time_str}", "%Y-%m-%d %H:%M:%S")
+                            out_time = datetime.datetime.strptime(f"{date_str} {out_time_str}", "%Y-%m-%d %H:%M:%S")
+                            total_hours += (out_time - in_time)
+                        except:
+                            continue
+
+            total_hours_float = total_hours.total_seconds() / 3600
+            display_hours = math.floor(total_hours_float * 100) / 100  # ตัดทศนิยมไม่ปัดเศษ
+            st.success(f"💼 รวมเวลาทำงานของ {selected_emp} ในเดือนนี้: {display_hours:.2f} ชั่วโมง")
+
 
     # ----------------------------
     # 📋 รายงานห้องพักประจำวัน
@@ -520,52 +598,74 @@ else:
         income_date_str = str(income_date)
 
         for section in ["front", "bar"]:
-            st.subheader(f"📍 รายรับจาก {'ฟรอนต์' if section == 'front' else 'บาร์'}")
-            key_list = f"income_{section}_{income_date_str}"
+            st.subheader(f"📍 {'ฟรอนต์' if section == 'front' else 'บาร'}")
+            key_income = f"income_{section}_{income_date_str}"
+            key_expense = f"expense_{section}_{income_date_str}"
 
-            # ✅ โหลดข้อมูลที่เคยบันทึกไว้จาก Firebase ถ้ายังไม่มีใน session_state
-            if key_list not in st.session_state:
-                firebase_data = db.child("daily_income").child(hotel).child(income_date_str).child(section).get().val()
-                st.session_state[key_list] = firebase_data if isinstance(firebase_data, list) else []
+            # โหลดข้อมูลเดิม
+            for key, db_path in [(key_income, "daily_income"), (key_expense, "daily_expense")]:
+                if key not in st.session_state:
+                    data = db.child(db_path).child(hotel).child(income_date_str).child(section).get().val()
+                    st.session_state[key] = data if isinstance(data, list) else []
 
-            # 📄 แบบฟอร์มกรอกข้อมูลใหม่
-            with st.form(f"form_income_{section}", clear_on_submit=True):
-                cols = st.columns([3, 2, 2])
-                income_type = cols[0].text_input("ประเภท", key=f"type_{section}_{income_date_str}")
+            # ฟอร์มเพิ่มรายรับ / รายจ่าย
+            with st.form(f"form_{section}", clear_on_submit=True):
+                cols = st.columns([3, 2, 2, 1])
+                entry_type = cols[0].text_input("ประเภท", key=f"type_{section}_{income_date_str}")
                 amount = cols[1].number_input("จำนวนเงิน (บาท)", min_value=0.0, step=1.0, key=f"amount_{section}_{income_date_str}")
-                method = cols[2].selectbox("วิธีรับเงิน", ["เงินสด", "โอน", "บัตร", "อื่น ๆ"], key=f"method_{section}_{income_date_str}")
-                submitted = st.form_submit_button("➕ เพิ่มรายรับ")
+                method = cols[2].selectbox("วิธีการ", ["เงินสด", "โอน", "บัตร", "อื่น ๆ"], key=f"method_{section}_{income_date_str}")
+                entry_mode = cols[3].selectbox("ประเภท", ["รายรับ", "รายจ่าย"], key=f"mode_{section}_{income_date_str}")
+                submitted = st.form_submit_button("➕ เพิ่ม")
 
-                if submitted and income_type and amount > 0:
-                    new_income = {
-                        "type": income_type,
+                if submitted and entry_type and amount > 0:
+                    new_entry = {
+                        "type": entry_type,
                         "amount": amount,
                         "method": method,
                         "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     }
-                    st.session_state[key_list].append(new_income)
+                    if entry_mode == "รายรับ":
+                        st.session_state[key_income].append(new_entry)
+                        db.child("daily_income").child(hotel).child(income_date_str).child(section).set(st.session_state[key_income])
+                    else:
+                        st.session_state[key_expense].append(new_entry)
+                        db.child("daily_expense").child(hotel).child(income_date_str).child(section).set(st.session_state[key_expense])
 
-                    # ✅ บันทึกไป Firebase
-                    db.child("daily_income").child(hotel).child(income_date_str).child(section).set(
-                        st.session_state[key_list]
-                    )
-                    st.success("✅ เพิ่มรายรับเรียบร้อยแล้ว")
+                    st.success("✅ บันทึกเรียบร้อยแล้ว")
                     st.rerun()
 
-            # ✅ แสดงรายการที่บันทึกไว้แล้ว
-            if st.session_state[key_list]:
-                st.markdown("### 🧾 รายการที่บันทึกไว้แล้ว")
-                total = 0
-                for idx, item in enumerate(st.session_state[key_list]):
-                    st.write(f"- {item['type']} / {item['amount']} บาท ({item['method']})")
-                    total += item["amount"]
-                    if st.button(f"❌ ลบรายการ", key=f"delete_income_{section}_{income_date_str}_{idx}"):
-                        st.session_state[key_list].pop(idx)
-                        db.child("daily_income").child(hotel).child(income_date_str).child(section).set(
-                            st.session_state[key_list]
-                        )
-                        st.success("✅ ลบรายการแล้ว")
-                        st.rerun()
-                st.info(f"💵 รวมรายรับทั้งหมด: {total:.2f} บาท")
-            else:
-                st.info("🔍 ยังไม่มีรายการรายรับที่บันทึกไว้")
+            # รายการที่บันทึกไว้แล้ว
+            st.markdown("### 📅 รายรับ")
+            income_by_method = {}
+            for idx, item in enumerate(st.session_state[key_income]):
+                st.write(f"+ {item['type']} / {item['amount']} บาท ({item['method']})")
+                income_by_method[item['method']] = income_by_method.get(item['method'], 0) + item['amount']
+                if st.button("❌ ลบ", key=f"del_inc_{section}_{idx}"):
+                    st.session_state[key_income].pop(idx)
+                    db.child("daily_income").child(hotel).child(income_date_str).child(section).set(st.session_state[key_income])
+                    st.rerun()
+
+            st.markdown("### 📅 รายจ่าย")
+            expense_by_method = {}
+            for idx, item in enumerate(st.session_state[key_expense]):
+                st.write(f"- {item['type']} / {item['amount']} บาท ({item['method']})")
+                expense_by_method[item['method']] = expense_by_method.get(item['method'], 0) + item['amount']
+                if st.button("❌ ลบ", key=f"del_exp_{section}_{idx}"):
+                    st.session_state[key_expense].pop(idx)
+                    db.child("daily_expense").child(hotel).child(income_date_str).child(section).set(st.session_state[key_expense])
+                    st.rerun()
+
+            st.markdown("---")
+            st.subheader("📈 สรุปรายรับ - รายจ่าย")
+            all_methods = set(income_by_method.keys()).union(set(expense_by_method.keys()))
+            for method in sorted(all_methods):
+                inc = income_by_method.get(method, 0)
+                exp = expense_by_method.get(method, 0)
+                st.write(f"{method}: {inc:.2f} - {exp:.2f} = {inc - exp:.2f} บาท")
+
+            # ✅ สรุปรวมแต่ละประเภท
+            total_all = 0
+            for method in all_methods:
+                total_all += income_by_method.get(method, 0) - expense_by_method.get(method, 0)
+
+            st.success(f"💰 รวมสุทธิทั้งหมดของแผนก{'ฟรอนต์' if section == 'front' else 'บาร์'}: {total_all:.2f} บาท")
