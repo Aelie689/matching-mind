@@ -163,42 +163,43 @@ else:
     elif selected_tab == "📋 บันทึกงานประจำวัน":
         st.header("📋 งานที่คุณทำวันนี้")
 
-        user_id = st.session_state["user"]["localId"]
         today = datetime.date.today()
         today_str = today.strftime('%Y-%m-%d')
 
-        task = st.text_area("คุณทำอะไรไปบ้างในวันนี้")
+        emp_name = st.text_input("👤 ชื่อพนักงาน")
+        task = st.text_area("📝 คุณทำอะไรไปบ้างในวันนี้")
 
-        if st.button("📝 บันทึกงานวันนี้"):
-            if task:
+        if st.button("✅ บันทึกงานวันนี้"):
+            if emp_name and task:
                 log = {
+                    "name": emp_name,
                     "task": task,
                     "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                 }
-                db.child("work_logs").child(hotel).child(today_str).child(user_id).set(log)
-                st.success("✅ บันทึกงานวันนี้เรียบร้อยแล้ว")
+                db.child("work_logs").child(hotel).child(today_str).child(emp_name).set(log)
+                st.success(f"✅ บันทึกงานของ {emp_name} เรียบร้อยแล้ว")
                 st.rerun()
             else:
-                st.warning("⚠️ กรุณากรอกรายละเอียดงาน")
+                st.warning("⚠️ กรุณากรอกชื่อและรายละเอียดงานให้ครบ")
 
         st.divider()
         st.subheader("📆 งานที่บันทึกไว้แล้ว")
 
-        # 📅 เพิ่มตัวเลือกวันที่
-        selected_date = st.date_input("เลือกวันที่ที่ต้องการดูงาน", value=today, key="worklog_date")
+        # 📅 เลือกวันที่เพื่อดูงานย้อนหลัง
+        selected_date = st.date_input("เลือกวันที่", value=today, key="worklog_date")
         selected_date_str = selected_date.strftime('%Y-%m-%d')
 
         logs = db.child("work_logs").child(hotel).child(selected_date_str).get().val() or {}
 
         if logs:
-            for uid, entry in logs.items():
-                st.markdown(f"👤 **พนักงาน ID:** {uid}")
-                st.caption(f"🕒 {entry['timestamp']}")
-                st.write(entry["task"])
+            for emp_name, entry in logs.items():
+                st.markdown(f"👤 **{emp_name}**")
+                st.caption(f"🕒 {entry.get('timestamp', '-')}")
+                st.write(entry.get("task", "-"))
 
-                if st.button(f"🗑 ลบงานของ {uid}", key=f"delete_task_{selected_date_str}_{uid}"):
-                    db.child("work_logs").child(hotel).child(selected_date_str).child(uid).remove()
-                    st.success(f"🗑 ลบงานของพนักงาน ID {uid} แล้วเรียบร้อย")
+                if st.button(f"🗑 ลบงานของ {emp_name}", key=f"delete_task_{selected_date_str}_{emp_name}"):
+                    db.child("work_logs").child(hotel).child(selected_date_str).child(emp_name).remove()
+                    st.success(f"🗑 ลบงานของ {emp_name} แล้วเรียบร้อย")
                     st.rerun()
 
                 st.divider()
