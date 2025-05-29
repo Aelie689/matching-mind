@@ -213,31 +213,28 @@ else:
     elif selected_tab == "🕒 ลงเวลางาน":
         st.header("🕒 ลงเวลางาน")
 
+        # 🔽 รายชื่อพนักงาน
+        EMPLOYEES = ["ดา", "นิว", "ออย", "เอิง", "สาว", "ลุงคม", "โอม", "ไข่"]
+
         selected_date = st.date_input("📅 เลือกวันที่ต้องการลงเวลา", value=datetime.date.today())
         selected_date_str = selected_date.strftime('%Y-%m-%d')
 
-        name = st.text_input("👤 ชื่อพนักงาน")
+        name = st.selectbox("👤 เลือกชื่อพนักงาน", EMPLOYEES)
         col1, col2 = st.columns(2)
 
         if col1.button("✅ ลงเวลาเข้า"):
-            if name:
-                db.child("attendance").child(hotel).child(selected_date_str).child(name).update({
-                    "in_time": datetime.datetime.now().strftime("%H:%M:%S")
-                })
-                st.success(f"✅ ลงเวลาเข้าเรียบร้อยแล้วสำหรับ {name}")
-                st.rerun()
-            else:
-                st.warning("⚠️ กรุณากรอกชื่อก่อนลงเวลาเข้า")
+            db.child("attendance").child(hotel).child(selected_date_str).child(name).update({
+                "in_time": datetime.datetime.now().strftime("%H:%M:%S")
+            })
+            st.success(f"✅ ลงเวลาเข้าเรียบร้อยแล้วสำหรับ {name}")
+            st.rerun()
 
         if col2.button("📄 ลงเวลาออก"):
-            if name:
-                db.child("attendance").child(hotel).child(selected_date_str).child(name).update({
-                    "out_time": datetime.datetime.now().strftime("%H:%M:%S")
-                })
-                st.success(f"📄 ลงเวลาออกเรียบร้อยแล้วสำหรับ {name}")
-                st.rerun()
-            else:
-                st.warning("⚠️ กรุณากรอกชื่อก่อนลงเวลาออก")
+            db.child("attendance").child(hotel).child(selected_date_str).child(name).update({
+                "out_time": datetime.datetime.now().strftime("%H:%M:%S")
+            })
+            st.success(f"📄 ลงเวลาออกเรียบร้อยแล้วสำหรับ {name}")
+            st.rerun()
 
         st.divider()
         st.subheader("📅 ตารางลงเวลา")
@@ -254,10 +251,11 @@ else:
         st.divider()
         st.subheader("📆 สรุปเวลาทำงานรายเดือน")
 
-        selected_emp = st.text_input("🔍 พิมพ์ชื่อพนักงาน")
-        selected_month = st.date_input("🕒 เลือกเดือน", value=datetime.date.today(), key="month_select")
+        selected_emp = st.selectbox("🔍 เลือกชื่อพนักงาน", EMPLOYEES, key="summary_emp")
+        selected_month = st.date_input("🗓️ เลือกเดือน", value=datetime.date.today(), key="month_select")
 
         if selected_emp:
+            import math
             month_prefix = selected_month.strftime("%Y-%m")  # eg: 2025-06
             all_data = db.child("attendance").child(hotel).get().val() or {}
 
