@@ -12,10 +12,10 @@ db = firebase.database()
 # ✅ โหลดรหัสลับจาก Firebase
 # ----------------------------
 @st.cache_data(ttl=300)
-def load_hotel_secrets():
+def load_hotel_secrets(id_token=None):
     try:
-        if user_token:
-            data = db.child("hotel_secrets").get(user_token)
+        if id_token:
+            data = db.child("hotel_secrets").get(id_token)
         else:
             data = db.child("hotel_secrets").get()
         return data.val() if data.val() else {}
@@ -23,7 +23,7 @@ def load_hotel_secrets():
         st.error(f"❌ โหลดรหัสลับไม่สำเร็จ: {e}")
         return {}
 
-HOTEL_SECRETS = load_hotel_secrets()
+
 
 # ----------------------------
 # ✅ ตรวจสอบ session login
@@ -34,7 +34,18 @@ if "user" not in st.session_state:
     menu = st.sidebar.selectbox("เลือกเมนู", ["เข้าสู่ระบบ", "สมัครสมาชิก"])
     email = st.sidebar.text_input("อีเมล")
     password = st.sidebar.text_input("รหัสผ่าน", type="password")
-    hotel_name = st.sidebar.selectbox("เลือกโรงแรม", list(HOTEL_SECRETS.keys()))
+
+    hotel_secrets = {}
+
+    # โหลด secrets ด้วย service account (ถ้า login แล้วจะโหลดด้วย idToken)
+    try:
+        user_temp = auth.sign_in_with_email_and_password(email, password)
+        hotel_secrets = load_hotel_secrets(user_temp['idToken'])
+    except:
+        hotel_secrets = {}  # ยังไม่ login ก็โหลดไม่ได้
+
+    hotel_secrets = load_hotel_secrets()  # ไม่ต้องใช้ id_token
+    hotel_name = st.sidebar.selectbox("เลือกโรงแรม", list(hotel_secrets.keys()) if hotel_secrets else ["-"])
     hotel_secret = st.sidebar.text_input("รหัสลับประจำโรงแรม", type="password")
 
     if menu == "สมัครสมาชิก":
@@ -43,7 +54,7 @@ if "user" not in st.session_state:
                 st.sidebar.warning("⚠️ กรุณาใช้อีเมลที่ถูกต้อง")
             elif len(password) < 6:
                 st.sidebar.warning("⚠️ รหัสผ่านต้องมีอย่างน้อย 6 ตัว")
-            elif hotel_secret != HOTEL_SECRETS.get(hotel_name, ""):
+            elif hotel_secret != hotel_secrets.get(hotel_name, ""):
                 st.sidebar.warning("❌ รหัสลับไม่ถูกต้อง")
             else:
                 try:
@@ -56,17 +67,15 @@ if "user" not in st.session_state:
         if st.sidebar.button("เข้าสู่ระบบ"):
             try:
                 user = auth.sign_in_with_email_and_password(email, password)
+                hotel_secrets = load_hotel_secrets(user['idToken'])
 
-                # 🔴 ย้ายการโหลดรหัสลับมาหลัง login และใช้ token
-                HOTEL_SECRETS = load_hotel_secrets(user['idToken'])
-
-                if hotel_secret != HOTEL_SECRETS.get(hotel_name, ""):
+                if hotel_secret != hotel_secrets.get(hotel_name, ""):
                     st.sidebar.warning("❌ รหัสลับไม่ถูกต้อง")
                 else:
                     st.session_state["user"] = user
                     st.session_state["hotel"] = hotel_name
+                    st.session_state["hotel_secrets"] = hotel_secrets
                     st.rerun()
-
             except Exception as e:
                 st.sidebar.error("❌ อีเมลหรือรหัสผ่านไม่ถูกต้อง")
 
