@@ -14,7 +14,10 @@ db = firebase.database()
 @st.cache_data(ttl=300)
 def load_hotel_secrets():
     try:
-        data = db.child("hotel_secrets").get()
+        if user_token:
+            data = db.child("hotel_secrets").get(user_token)
+        else:
+            data = db.child("hotel_secrets").get()
         return data.val() if data.val() else {}
     except Exception as e:
         st.error(f"❌ โหลดรหัสลับไม่สำเร็จ: {e}")
@@ -53,14 +56,20 @@ if "user" not in st.session_state:
         if st.sidebar.button("เข้าสู่ระบบ"):
             try:
                 user = auth.sign_in_with_email_and_password(email, password)
+
+                # 🔴 ย้ายการโหลดรหัสลับมาหลัง login และใช้ token
+                HOTEL_SECRETS = load_hotel_secrets(user['idToken'])
+
                 if hotel_secret != HOTEL_SECRETS.get(hotel_name, ""):
                     st.sidebar.warning("❌ รหัสลับไม่ถูกต้อง")
                 else:
                     st.session_state["user"] = user
                     st.session_state["hotel"] = hotel_name
                     st.rerun()
+
             except Exception as e:
                 st.sidebar.error("❌ อีเมลหรือรหัสผ่านไม่ถูกต้อง")
+
 
 # ----------------------------
 # ✅ ผู้ใช้เข้าสู่ระบบแล้ว
